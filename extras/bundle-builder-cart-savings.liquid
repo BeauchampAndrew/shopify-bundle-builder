@@ -1,0 +1,65 @@
+{%- comment -%}
+  Optional companion to sections/bundle-builder.liquid: a "You're saving $X" line for your cart.
+  Copy this file into your theme's snippets/ folder, then render it next to the cart total in the
+  cart drawer and cart page (see README, "Show savings in the cart"):
+
+    {% render 'bundle-builder-cart-savings' %}
+
+  Savings = every discount on the cart (box codes, automatic discounts) + compare-at markdowns.
+  Renders nothing when there are no savings.
+
+  Optional parameters:
+    label       Text with [amount] where the money goes. Default: "You're saving [amount]"
+    background  Pill background color. Default: #e3f8ec
+    color       Pill text color. Default: #0b6b3a
+    align       left, center or right. Default: right
+
+  Example: {% render 'bundle-builder-cart-savings', label: 'Box savings: [amount]', background: '#76F8FB', color: '#3B0E8C' %}
+{%- endcomment -%}
+
+{%- liquid
+  assign bbx_savings = cart.total_discount
+  for item in cart.items
+    if item.variant.compare_at_price > item.variant.price
+      assign bbx_markdown = item.variant.compare_at_price | minus: item.variant.price | times: item.quantity
+      assign bbx_savings = bbx_savings | plus: bbx_markdown
+    endif
+  endfor
+
+  assign bbx_amount = bbx_savings | money
+  assign bbx_label = label | default: "You're saving [amount]" | replace: '[amount]', bbx_amount
+  assign bbx_align = align | default: 'right'
+  case bbx_align
+    when 'left'
+      assign bbx_justify = 'flex-start'
+    when 'center'
+      assign bbx_justify = 'center'
+    else
+      assign bbx_justify = 'flex-end'
+  endcase
+-%}
+
+{%- if bbx_savings > 0 -%}
+  <div
+    class="bbx-cart-savings"
+    style="--bbx-cs-bg: {{ background | default: '#e3f8ec' }}; --bbx-cs-fg: {{ color | default: '#0b6b3a' }}; justify-content: {{ bbx_justify }};"
+    data-bbx-cart-savings="{{ bbx_savings }}"
+  >
+    <span class="bbx-cart-savings__pill">{{ bbx_label }}</span>
+  </div>
+  <style>
+    .bbx-cart-savings {
+      display: flex;
+      margin: 0.5em 0;
+    }
+    .bbx-cart-savings__pill {
+      padding: 0.3em 0.9em;
+      border-radius: 999px;
+      background: var(--bbx-cs-bg);
+      color: var(--bbx-cs-fg);
+      font-size: 0.875em;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+  </style>
+{%- endif -%}

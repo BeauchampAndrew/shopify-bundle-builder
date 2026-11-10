@@ -1,0 +1,2639 @@
+{%- comment -%}
+  Build-your-own bundle box. One portable section for any Online Store 2.0 theme.
+  Shoppers pick a box size (each size has its own discount), fill the box with +/- buttons,
+  see every slot, a live total and savings, then add the whole box to the cart in one click.
+  The matching discount code (set per size) is applied to the cart after adding.
+{%- endcomment -%}
+
+{%- liquid
+  assign s = section.settings
+  assign sizes = section.blocks | where: 'type', 'size'
+  assign cats = section.blocks | where: 'type', 'category'
+  assign bundle_presets = section.blocks | where: 'type', 'preset'
+
+  assign default_size = 0
+  for b in sizes
+    if b.settings.default and default_size == 0
+      assign default_size = b.settings.size
+    endif
+  endfor
+  if default_size == 0 and sizes.size > 0
+    assign default_size = sizes.first.settings.size
+  endif
+
+  assign anchor_prefix = 'bbx-' | append: section.id | append: '-'
+
+  assign font_stack = ''
+  if s.use_custom_font and s.font != blank
+    assign font_stack = s.font.family | append: ', ' | append: s.font.fallback_families
+    assign font_bold = s.font | font_modify: 'weight', '700'
+    assign font_heavy = s.font | font_modify: 'weight', '800'
+    assign font_black = s.font | font_modify: 'weight', '900'
+  endif
+-%}
+
+{%- if font_stack != '' -%}
+  <style>
+    {{ s.font | font_face: font_display: 'swap' }}
+    {%- if font_bold %}{{ font_bold | font_face: font_display: 'swap' }}{% endif -%}
+    {%- if font_heavy %}{{ font_heavy | font_face: font_display: 'swap' }}{% endif -%}
+    {%- if font_black %}{{ font_black | font_face: font_display: 'swap' }}{% endif -%}
+  </style>
+{%- endif -%}
+
+<bundle-builder
+  class="bbx{% if s.uppercase %} bbx--upper{% endif %}{% if s.sticky_nav %} bbx--sticky-nav{% endif %} bbx--fit-{{ s.image_fit }}"
+  id="bbx-{{ section.id }}"
+  style="
+    --bbx-bg: {{ s.color_bg }};
+    --bbx-ink: {{ s.color_ink }};
+    --bbx-btn-fg: {{ s.color_button_text }};
+    --bbx-card: {{ s.color_card }};
+    --bbx-selected: {{ s.color_selected }};
+    --bbx-panel-bg: {{ s.color_panel }};
+    --bbx-max: {{ s.max_width }}px;
+    --bbx-radius: {{ s.radius }}px;
+    --bbx-btn-radius: {% case s.button_shape %}{% when 'rounded' %}12px{% when 'square' %}0px{% else %}999px{% endcase %};
+    --bbx-border: {{ s.border_width }}px;
+    --bbx-cols-d: {{ s.columns_desktop }};
+    --bbx-cols-m: {{ s.columns_mobile }};
+    --bbx-sticky: {{ s.sticky_top }}px;
+    --bbx-pt: {{ s.padding_top }}px;
+    --bbx-pb: {{ s.padding_bottom }}px;
+    {%- if font_stack != '' %} --bbx-font: {{ font_stack | escape }};{% endif -%}
+  "
+  data-section-id="{{ section.id }}"
+  data-money-sample="{{ 123456789 | money | strip_html | escape }}"
+  data-cart-url="{{ routes.cart_url }}"
+  data-cart-add-url="{{ routes.cart_add_url }}"
+  data-cart-update-url="{{ routes.cart_update_url }}"
+  data-root-url="{{ routes.root_url }}"
+  data-after-add="{{ s.after_add }}"
+  data-auto-upgrade="{{ s.auto_upgrade }}"
+  data-label-status-empty="{{ s.label_status_empty | escape }}"
+  data-label-status-partial="{{ s.label_status_partial | escape }}"
+  data-label-status-full="{{ s.label_status_full | escape }}"
+  data-label-status-next="{{ s.label_status_next | escape }}"
+  data-label-saving-partial="{{ s.label_saving_partial | escape }}"
+  data-label-saving-full="{{ s.label_saving_full | escape }}"
+  data-label-cta-more="{{ s.label_cta_more | escape }}"
+  data-label-cta-full="{{ s.label_cta_full | escape }}"
+  data-label-cta-adding="{{ s.label_cta_adding | escape }}"
+  data-label-cta-added="{{ s.label_cta_added | escape }}"
+  data-label-upgraded="{{ s.label_upgraded | escape }}"
+  data-label-error="{{ s.label_error | escape }}"
+  data-label-code-error="{{ s.label_code_error | escape }}"
+  data-label-size="{{ s.label_size | escape }}"
+  data-label-choose="{{ s.label_step_products | escape }}"
+  data-label-preset-added="{{ s.label_preset_added | escape }}"
+>
+  <div class="bbx__inner">
+    {%- if s.heading != blank or s.subheading != blank -%}
+      <header class="bbx__header">
+        {%- if s.heading != blank -%}<h2 class="bbx__heading">{{ s.heading }}</h2>{%- endif -%}
+        {%- if s.subheading != blank -%}<p class="bbx__subheading">{{ s.subheading }}</p>{%- endif -%}
+      </header>
+    {%- endif -%}
+
+    {%- if s.show_nav and cats.size > 1 -%}
+      <nav class="bbx__nav" aria-label="{{ s.label_nav | escape }}">
+        {%- for block in cats -%}
+          {%- if block.settings.title != blank -%}
+            <a class="bbx__pill" href="#{{ anchor_prefix }}{{ block.id }}" data-bbx-nav>{{ block.settings.title }}</a>
+          {%- endif -%}
+        {%- endfor -%}
+      </nav>
+    {%- endif -%}
+
+    <div class="bbx__layout">
+      {%- comment -%} Builder panel. First in the DOM so it sits above the catalog on mobile. {%- endcomment -%}
+      <aside class="bbx__panel" data-bbx-panel aria-label="{{ s.label_step_size | escape }}">
+        <div class="bbx__step">
+          <h3 class="bbx__step-title"><span class="bbx__step-num" aria-hidden="true">1</span>{{ s.label_step_size }}</h3>
+
+          {%- if sizes.size > 0 -%}
+            <div class="bbx__sizes" role="group" aria-label="{{ s.label_step_size | escape }}">
+              {%- for b in sizes -%}
+                <button
+                  type="button"
+                  class="bbx__size{% if b.settings.size == default_size %} is-active{% endif %}"
+                  aria-pressed="{% if b.settings.size == default_size %}true{% else %}false{% endif %}"
+                  data-bbx-size="{{ b.settings.size }}"
+                  data-discount="{{ b.settings.discount }}"
+                  data-code="{{ b.settings.code | strip | escape }}"
+                  {{ b.shopify_attributes }}
+                >
+                  {%- if b.settings.badge != blank -%}
+                    <span
+                      class="bbx__badge"
+                      style="--bbx-badge-bg: {{ b.settings.badge_bg | default: b.settings.badge_color }}; --bbx-badge-fg: {{ b.settings.badge_text }};"
+                    >{{ b.settings.badge }}</span>
+                  {%- endif -%}
+                  <span class="bbx__size-name">{{ s.label_size | replace: '[size]', b.settings.size }}</span>
+                  {%- if b.settings.discount > 0 -%}
+                    <span class="bbx__size-save">{{ s.label_size_save | replace: '[percent]', b.settings.discount }}</span>
+                  {%- endif -%}
+                </button>
+              {%- endfor -%}
+            </div>
+            {%- if request.design_mode -%}
+              {%- for b in sizes -%}
+                {%- if b.settings.discount > 0 and b.settings.code == blank -%}
+                  <p class="bbx__editor-hint">The {{ b.settings.size }}-item size shows {{ b.settings.discount }}% savings but has no discount code, so checkout won't apply it. Add the code in its Box size block.</p>
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- elsif request.design_mode -%}
+            <p class="bbx__editor-hint">Add a "Box size" block to set your box sizes and discounts.</p>
+          {%- endif -%}
+        </div>
+
+        <hr class="bbx__rule">
+
+        <div class="bbx__step">
+          <h3 class="bbx__step-title"><span class="bbx__step-num" aria-hidden="true">2</span>{{ s.label_step_products }}</h3>
+
+          <div class="bbx__progress" data-bbx-progress style="--bbx-fill: 0;" aria-hidden="true">
+            <div class="bbx__track"><div class="bbx__fill"></div></div>
+            <span class="bbx__knob bbx__knob--count" data-bbx-count>0</span>
+            <span class="bbx__knob bbx__knob--end" data-bbx-target>{{ default_size }}</span>
+          </div>
+
+          <p class="bbx__status" data-bbx-status aria-live="polite">
+            {%- liquid
+              assign default_discount = 0
+              for b in sizes
+                if b.settings.size == default_size
+                  assign default_discount = b.settings.discount
+                endif
+              endfor
+              echo s.label_status_empty | replace: '[count]', default_size | replace: '[percent]', default_discount
+            -%}
+          </p>
+
+          <ul class="bbx__slots" data-bbx-slots>
+            {%- if default_size > 0 -%}
+              {%- for i in (1..default_size) -%}
+                <li class="bbx__slot"><button type="button" class="bbx__slot-empty" data-bbx-empty aria-label="{{ s.label_step_products | escape }}">+</button></li>
+              {%- endfor -%}
+            {%- endif -%}
+          </ul>
+          <button type="button" class="bbx__clear" data-bbx-clear hidden>{{ s.label_clear }}</button>
+        </div>
+
+        <hr class="bbx__rule">
+
+        <div class="bbx__summary">
+          <span class="bbx__total-label">{{ s.label_total }}</span>
+          <span class="bbx__total-prices">
+            <s data-bbx-compare hidden></s>
+            <strong data-bbx-price>{{ 0 | money }}</strong>
+          </span>
+          <p class="bbx__saving" data-bbx-saving></p>
+        </div>
+
+        <button type="button" class="bbx__cta" data-bbx-cta aria-disabled="true">
+          {{- s.label_cta_more | replace: '[count]', default_size -}}
+        </button>
+        <p class="bbx__error" data-bbx-error role="alert" hidden></p>
+
+        {%- if s.footnote != blank -%}
+          <p class="bbx__note">{{ s.footnote }}</p>
+        {%- endif -%}
+      </aside>
+
+      <div class="bbx__catalog" data-bbx-catalog>
+        {%- if bundle_presets.size > 0 -%}
+          <div class="bbx__presets">
+            {%- if s.presets_heading != blank -%}
+              <p class="bbx__presets-title">{{ s.presets_heading }}</p>
+            {%- endif -%}
+            <div class="bbx__presets-list">
+              {%- for block in bundle_presets -%}
+                {%- capture preset_items -%}
+                  [
+                  {%- for product in block.settings.products -%}
+                    {%- liquid
+                      assign v = product.selected_or_first_available_variant
+                      assign img = v.featured_image | default: product.featured_image
+                    -%}
+                    {%- liquid
+                      assign item_title = product.title
+                      unless product.has_only_default_variant
+                        assign item_title = item_title | append: ' (' | append: v.title | append: ')'
+                      endunless
+                    -%}
+                    {"id":"{{ v.id }}","price":{{ v.price }},"title":{{ item_title | json }},"image":{% if img %}{{ img | image_url: width: 300 | json }}{% else %}""{% endif %},"available":{{ v.available }}}
+                    {%- unless forloop.last %},{% endunless -%}
+                  {%- endfor -%}
+                  ]
+                {%- endcapture -%}
+                <button
+                  type="button"
+                  class="bbx__preset"
+                  data-bbx-preset
+                  data-size="{{ block.settings.size }}"
+                  data-name="{{ block.settings.title | escape }}"
+                  data-items="{{ preset_items | strip | escape }}"
+                  {{ block.shopify_attributes }}
+                  {% if block.settings.products == blank %}aria-disabled="true"{% endif %}
+                >
+                  {{- block.settings.title -}}
+                </button>
+              {%- endfor -%}
+            </div>
+          </div>
+        {%- endif -%}
+        {%- for block in cats -%}
+          {%- liquid
+            assign list = block.settings.products
+            if list == blank and block.settings.collection != blank
+              assign list = block.settings.collection.products
+            endif
+          -%}
+          <section class="bbx__cat" id="{{ anchor_prefix }}{{ block.id }}" data-bbx-cat {{ block.shopify_attributes }}>
+            {%- if block.settings.title != blank -%}
+              <h3 class="bbx__cat-title">{{ block.settings.title }}</h3>
+            {%- endif -%}
+
+            {%- if list != blank -%}
+              <ul class="bbx__grid">
+                {%- for product in list limit: block.settings.limit -%}
+                  {%- liquid
+                    assign v = product.selected_or_first_available_variant
+                    assign img = v.featured_image | default: product.featured_image
+                  -%}
+                  <li
+                    class="bbx__card"
+                    data-bbx-card
+                    data-variant-id="{{ v.id }}"
+                    data-price="{{ v.price }}"
+                    data-title="{{ product.title | escape }}{% unless product.has_only_default_variant %} ({{ v.title | escape }}){% endunless %}"
+                    data-image="{% if img %}{{ img | image_url: width: 300 }}{% endif %}"
+                    data-available="{{ v.available }}"
+                  >
+                    <div class="bbx__card-media">
+                      {%- if img -%}
+                        {{
+                          img
+                          | image_url: width: 800
+                          | image_tag:
+                            loading: 'lazy',
+                            widths: '200, 300, 400, 600, 800',
+                            sizes: '(min-width: 990px) 20vw, 45vw',
+                            class: 'bbx__card-img',
+                            alt: product.title
+                        }}
+                      {%- else -%}
+                        {{ 'product-1' | placeholder_svg_tag: 'bbx__card-img bbx__placeholder' }}
+                      {%- endif -%}
+                    </div>
+                    <p class="bbx__card-title">{{ product.title }}</p>
+                    {%- unless product.has_only_default_variant -%}
+                      <p class="bbx__card-variant">{{ v.title }}</p>
+                    {%- endunless -%}
+                    <p class="bbx__card-price">
+                      {%- if v.compare_at_price > v.price -%}<s>{{ v.compare_at_price | money }}</s> {% endif -%}
+                      {{ v.price | money }}
+                    </p>
+                    <div class="bbx__card-actions">
+                      <button type="button" class="bbx__add" data-bbx-add {% unless v.available %}disabled{% endunless %}>
+                        {%- if v.available -%}{{ s.label_add }}{%- else -%}{{ s.label_sold_out }}{%- endif -%}
+                      </button>
+                      <div class="bbx__stepper" data-bbx-stepper hidden>
+                        <button type="button" class="bbx__step-btn" data-bbx-dec aria-label="Remove one {{ product.title | escape }}">&minus;</button>
+                        <span class="bbx__qty" data-bbx-qty>0</span>
+                        <button type="button" class="bbx__step-btn" data-bbx-inc aria-label="Add one {{ product.title | escape }}">+</button>
+                      </div>
+                    </div>
+                  </li>
+                {%- endfor -%}
+              </ul>
+            {%- elsif request.design_mode -%}
+              <p class="bbx__editor-hint">Pick a collection or products for this category.</p>
+            {%- endif -%}
+          </section>
+        {%- else -%}
+          {%- if request.design_mode -%}
+            <p class="bbx__editor-hint">Add a "Product category" block and pick a collection to show products.</p>
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+
+  {%- comment -%} Mobile dock: progress + add button pinned to the bottom while browsing products {%- endcomment -%}
+  <div class="bbx__dock" data-bbx-dock>
+    <button type="button" class="bbx__dock-info" data-bbx-view-box>
+      <span class="bbx__dock-count">
+        <span data-bbx-dock-count>0/{{ default_size }}</span>
+        <span class="bbx__dock-view">
+          {{- s.label_view_box -}}
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M1.5 6.5 5 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+      </span>
+      <span class="bbx__dock-status" data-bbx-dock-status></span>
+    </button>
+    <button type="button" class="bbx__cta" data-bbx-cta aria-disabled="true">
+      {{- s.label_cta_more | replace: '[count]', default_size -}}
+    </button>
+  </div>
+</bundle-builder>
+
+{% stylesheet %}
+  .bbx {
+    --bbx-track: color-mix(in srgb, var(--bbx-ink) 26%, var(--bbx-panel-bg));
+    --bbx-line: color-mix(in srgb, var(--bbx-ink) 22%, var(--bbx-panel-bg));
+    --bbx-soft: color-mix(in srgb, #fff 50%, var(--bbx-panel-bg));
+    --bbx-radius: 18px;
+    display: block;
+    background: var(--bbx-bg);
+    color: var(--bbx-ink);
+    font-family: var(--bbx-font, inherit);
+    padding: var(--bbx-pt) 0 var(--bbx-pb);
+    line-height: 1.4;
+  }
+  .bbx *,
+  .bbx *::before,
+  .bbx *::after {
+    box-sizing: border-box;
+  }
+  .bbx [hidden] {
+    display: none !important;
+  }
+  /* Resets against theme-wide tag styles. :where() keeps them at class-level specificity, and they come
+     before the component rules, so components win while bare theme rules (button, h2, li) lose. */
+  .bbx :where(button) {
+    width: auto;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: none;
+    text-shadow: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bbx :where(h2, h3, p) {
+    color: inherit;
+    font-family: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .bbx :where(ul, li) {
+    margin: 0;
+    padding: 0;
+    float: none;
+    list-style: none;
+  }
+  .bbx :where(li)::before {
+    content: none;
+  }
+  .bbx :focus-visible {
+    outline: 2px solid var(--bbx-ink);
+    outline-offset: 2px;
+  }
+  .bbx__inner {
+    max-width: var(--bbx-max);
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+
+  /* Header + category nav */
+  .bbx__header {
+    text-align: center;
+    margin-bottom: 1.5em;
+  }
+  .bbx__heading {
+    margin: 0;
+    font-size: clamp(2em, 5vw, 3.25em);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .bbx__subheading {
+    margin: 0.6em auto 0;
+    max-width: 38em;
+    font-size: 1.05em;
+  }
+  .bbx__nav {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 0 2.25em;
+  }
+  /* Sticky category bar: pins under the theme's sticky header (JS measures it into --bbx-offset).
+     The background bleeds full width with a spread shadow, clipped to the bar's own height. */
+  .bbx--sticky-nav .bbx__nav {
+    position: sticky;
+    top: var(--bbx-offset, 0px);
+    z-index: 2;
+    margin-bottom: 1.5em;
+    padding-block: 12px;
+    background: var(--bbx-bg);
+    box-shadow: 0 0 0 100vmax var(--bbx-bg);
+    clip-path: inset(0 -100vmax);
+  }
+  .bbx--sticky-nav .bbx__nav.is-stuck {
+    box-shadow: 0 0 0 100vmax var(--bbx-bg), 0 2px 0 100vmax var(--bbx-line);
+    clip-path: inset(0 -100vmax -2px);
+  }
+  @media screen and (max-width: 749px) {
+    /* One swipeable row on phones instead of wrapping */
+    .bbx__nav {
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      margin-inline: -16px;
+      padding: 2px 16px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .bbx__nav::-webkit-scrollbar {
+      display: none;
+    }
+  }
+  .bbx__pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0.35em 1em;
+    border: var(--bbx-border, 2px) solid var(--bbx-ink);
+    border-radius: var(--bbx-btn-radius, 999px);
+    color: inherit;
+    font-size: 0.9em;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-decoration: none;
+    transition: background-color 0.15s, color 0.15s;
+  }
+  .bbx__pill:hover,
+  .bbx__pill.is-active {
+    background: var(--bbx-ink);
+    color: var(--bbx-btn-fg);
+  }
+  .bbx--upper :is(.bbx__heading, .bbx__pill, .bbx__preset, .bbx__cat-title, .bbx__size, .bbx__badge, .bbx__card-title, .bbx__add, .bbx__cta) {
+    text-transform: uppercase;
+  }
+
+  /* Layout: panel above the catalog on mobile, sticky on the right on desktop */
+  .bbx__layout {
+    display: grid;
+    gap: 40px;
+  }
+  @media screen and (min-width: 990px) {
+    .bbx__inner {
+      padding: 0 32px;
+    }
+    .bbx__layout {
+      grid-template-columns: minmax(0, 1fr) clamp(380px, 38%, 580px);
+      gap: 48px;
+      align-items: start;
+    }
+    .bbx__catalog {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .bbx__panel {
+      grid-column: 2;
+      grid-row: 1;
+      position: sticky;
+      top: calc(var(--bbx-offset, 0px) + var(--bbx-nav-h, 0px) + var(--bbx-sticky));
+      max-height: calc(100vh - var(--bbx-offset, 0px) - var(--bbx-nav-h, 0px) - var(--bbx-sticky) - 16px);
+      max-height: calc(100dvh - var(--bbx-offset, 0px) - var(--bbx-nav-h, 0px) - var(--bbx-sticky) - 16px);
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    /* Short screens: the panel scrolls inside, so keep the add button pinned to its bottom edge */
+    .bbx__panel .bbx__cta {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      box-shadow: 0 0 0 10px var(--bbx-panel-bg);
+    }
+  }
+
+  /* Prebuilt bundles strip */
+  .bbx__presets {
+    margin-bottom: 2.5em;
+    padding: 22px 18px 24px;
+    border-radius: var(--bbx-radius);
+    background: color-mix(in srgb, var(--bbx-ink) 7%, var(--bbx-bg));
+    text-align: center;
+  }
+  .bbx__presets-title {
+    margin: 0 0 0.8em;
+    font-size: 1.25em;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+  .bbx__presets-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 14px;
+  }
+  .bbx__preset {
+    min-width: 10em;
+    min-height: 44px;
+    padding: 0.4em 1.4em;
+    border: var(--bbx-border, 2px) solid var(--bbx-ink);
+    border-radius: var(--bbx-btn-radius, 999px);
+    background: var(--bbx-bg);
+    color: inherit;
+    font-size: 0.9em;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+  }
+  .bbx__preset:hover,
+  .bbx__preset.is-active {
+    background: var(--bbx-ink);
+    color: var(--bbx-btn-fg);
+  }
+  .bbx__preset[aria-disabled='true'] {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Catalog */
+  .bbx__cat {
+    scroll-margin-top: calc(max(var(--bbx-offset, 0px), var(--bbx-header-h, 0px)) + var(--bbx-nav-h, 0px) + 16px);
+  }
+  .bbx__cat + .bbx__cat {
+    margin-top: 3em;
+  }
+  .bbx__cat-title {
+    margin: 0 0 0.6em;
+    font-size: clamp(1.75em, 3.5vw, 2.5em);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .bbx__grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(var(--bbx-cols-m), minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media screen and (min-width: 750px) {
+    .bbx__grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px;
+    }
+  }
+  @media screen and (min-width: 990px) {
+    .bbx__grid {
+      grid-template-columns: repeat(var(--bbx-cols-d), minmax(0, 1fr));
+    }
+  }
+  .bbx__card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5em;
+    padding: 12px 10px 14px;
+    border: var(--bbx-border, 2px) solid var(--bbx-ink);
+    border-radius: var(--bbx-radius);
+    background: var(--bbx-card);
+    text-align: center;
+    transition: background-color 0.2s;
+  }
+  @media screen and (min-width: 750px) {
+    .bbx__card {
+      padding: 18px 16px 18px;
+    }
+  }
+  .bbx__card.is-selected {
+    background: var(--bbx-selected);
+  }
+  .bbx__card-media {
+    width: 100%;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: max(0px, calc(var(--bbx-radius) - 6px));
+  }
+  .bbx__card-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    transition: transform 0.3s;
+  }
+  .bbx--fit-cover .bbx__card-img {
+    object-fit: cover;
+  }
+  .bbx__card:hover .bbx__card-img {
+    transform: scale(1.04);
+  }
+  .bbx__placeholder {
+    background: var(--bbx-soft);
+    fill: var(--bbx-line);
+  }
+  .bbx__card-title {
+    flex-grow: 1;
+    margin: 0.35em 0 0;
+    font-size: 0.95em;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0.02em;
+  }
+  .bbx__card-variant {
+    margin: -0.2em 0 0;
+    font-size: 0.8em;
+    opacity: 0.75;
+  }
+  .bbx__card-price {
+    margin: 0;
+    font-weight: 800;
+  }
+  .bbx__card-price s {
+    font-weight: 500;
+    opacity: 0.6;
+  }
+  .bbx__card-actions {
+    width: 100%;
+    margin-top: 0.25em;
+  }
+  .bbx__add,
+  .bbx__stepper {
+    width: 100%;
+    min-height: 44px;
+    border: 0;
+    border-radius: var(--bbx-btn-radius, 999px);
+    background: var(--bbx-ink);
+    color: var(--bbx-btn-fg);
+    font-size: 0.95em;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+  }
+  .bbx__add {
+    cursor: pointer;
+    transition: transform 0.15s, opacity 0.15s;
+  }
+  .bbx__add:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .bbx__add:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+  .bbx__stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px;
+  }
+  .bbx__step-btn {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-size: 1.35em;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .bbx__step-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+  .bbx__qty {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Builder panel */
+  .bbx__panel {
+    padding: 28px 18px 24px;
+    border: var(--bbx-border, 2px) solid var(--bbx-ink);
+    border-radius: calc(var(--bbx-radius) + 6px);
+    background: var(--bbx-panel-bg);
+  }
+  @media screen and (min-width: 750px) {
+    .bbx__panel {
+      padding: 36px 40px 28px;
+    }
+  }
+  .bbx__step-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45em;
+    margin: 0 0 1em;
+    font-size: 1.5em;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+  .bbx__step-num {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 1.35em;
+    height: 1.35em;
+    border-radius: 0.22em;
+    background: var(--bbx-ink);
+    color: var(--bbx-btn-fg);
+    font-size: 0.8em;
+  }
+  .bbx__rule {
+    margin: 1.75em 0;
+    border: 0;
+    border-top: 2px solid var(--bbx-line);
+  }
+
+  /* Size picker: one rounded track, active size is a filled pill, badges sit on the top edge */
+  .bbx__sizes {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    margin-top: 0.8em;
+    border: var(--bbx-border, 2px) solid var(--bbx-ink);
+    border-radius: var(--bbx-btn-radius, 999px);
+  }
+  .bbx__size {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1em;
+    min-height: 64px;
+    margin: calc(var(--bbx-border, 2px) * -1);
+    padding: 0.85em 0.35em 0.75em;
+    border: 0;
+    border-radius: var(--bbx-btn-radius, 999px);
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+  }
+  .bbx__size.is-active {
+    background: var(--bbx-ink);
+    color: var(--bbx-btn-fg);
+  }
+  .bbx__size-name {
+    font-size: 1.15em;
+    font-weight: 900;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .bbx__size-save {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .bbx__badge {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -55%);
+    padding: 0.2em 0.75em;
+    border-radius: var(--bbx-btn-radius, 999px);
+    background: var(--bbx-badge-bg);
+    color: var(--bbx-badge-fg);
+    font-size: 0.62em;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+  @media screen and (min-width: 750px) {
+    .bbx__size-name {
+      font-size: 1.3em;
+    }
+    .bbx__size-save {
+      font-size: 0.8em;
+    }
+    .bbx__badge {
+      font-size: 0.7em;
+    }
+  }
+
+  /* Progress track with a moving count knob and the target at the end */
+  .bbx__progress {
+    --bbx-knob: 34px;
+    position: relative;
+    height: var(--bbx-knob);
+    margin-bottom: 0.9em;
+  }
+  .bbx__track {
+    position: absolute;
+    top: 50%;
+    left: calc(var(--bbx-knob) / 2);
+    right: calc(var(--bbx-knob) / 2);
+    height: 6px;
+    transform: translateY(-50%);
+    border-radius: 6px;
+    background: var(--bbx-track);
+    overflow: hidden;
+  }
+  .bbx__fill {
+    width: calc(var(--bbx-fill) * 100%);
+    height: 100%;
+    background: var(--bbx-ink);
+    transition: width 0.35s ease;
+  }
+  .bbx__knob {
+    position: absolute;
+    top: 50%;
+    display: grid;
+    place-items: center;
+    width: var(--bbx-knob);
+    height: var(--bbx-knob);
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--bbx-ink);
+    color: var(--bbx-btn-fg);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .bbx__knob--count {
+    z-index: 1;
+    left: calc(var(--bbx-knob) / 2 + (100% - var(--bbx-knob)) * var(--bbx-fill));
+    box-shadow: 0 0 0 3px var(--bbx-panel-bg);
+    transition: left 0.35s ease, opacity 0.2s;
+  }
+  .bbx__knob--end {
+    left: calc(100% - var(--bbx-knob) / 2);
+    transition: box-shadow 0.2s;
+  }
+  .bbx__progress.is-full .bbx__knob--count {
+    opacity: 0;
+  }
+  .bbx__progress.is-full .bbx__knob--end {
+    box-shadow: 0 0 0 4px var(--bbx-selected);
+  }
+  /* Countdown callout under the counter */
+  .bbx__status {
+    display: table;
+    margin: 0 auto 1.1em;
+    padding: 0.45em 1.1em;
+    border-radius: var(--bbx-btn-radius, 999px);
+    background: var(--bbx-soft);
+    font-weight: 800;
+    line-height: 1.3;
+    text-align: center;
+    transition: background-color 0.2s;
+  }
+  .bbx__status.is-full {
+    background: var(--bbx-selected);
+  }
+  .bbx__status.is-pulse {
+    animation: bbx-pulse 0.5s ease;
+  }
+
+  /* Slots: four per row (three when the size divides by 3 but not 4), centered */
+  .bbx__slots {
+    --bbx-slot-gap: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--bbx-slot-gap);
+    margin: 0;
+    padding: 6px 0 0;
+    list-style: none;
+  }
+  .bbx__slot {
+    position: relative;
+    flex: 0 0 calc((100% - 3 * var(--bbx-slot-gap)) / 4);
+    aspect-ratio: 1;
+    border: 2px dashed var(--bbx-ink);
+    border-radius: calc(var(--bbx-radius) * 0.75);
+    background: var(--bbx-soft);
+  }
+  .bbx__slots.is-cols-3 {
+    padding-inline: 12.5%;
+  }
+  .bbx__slots.is-cols-3 .bbx__slot {
+    flex-basis: calc((100% - 2 * var(--bbx-slot-gap)) / 3);
+  }
+  .bbx__clear {
+    display: block;
+    margin: 0.9em 0 0 auto;
+    padding: 0.25em 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-size: 0.8em;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    opacity: 0.7;
+    cursor: pointer;
+  }
+  .bbx__clear:hover {
+    opacity: 1;
+  }
+  .bbx__slot.is-new {
+    animation: bbx-pop 0.3s ease;
+  }
+  .bbx__slot-empty {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-size: 1.6em;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .bbx__slot-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 8%;
+    object-fit: contain;
+    border-radius: calc(var(--bbx-radius) * 0.65);
+  }
+  .bbx--fit-cover .bbx__slot-img {
+    padding: 0;
+    object-fit: cover;
+  }
+  .bbx__slot-remove {
+    position: absolute;
+    top: -11px;
+    right: -11px;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 2px solid var(--bbx-panel-bg);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--bbx-ink) 45%, var(--bbx-panel-bg));
+    color: #fff;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+  .bbx__slot-remove::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+  .bbx__slot-remove:hover {
+    background: var(--bbx-ink);
+  }
+
+  /* Total, savings, add button */
+  .bbx__summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.4em 1em;
+    margin-bottom: 1em;
+  }
+  .bbx__total-label {
+    font-weight: 800;
+    font-size: 1.1em;
+  }
+  .bbx__total-prices s {
+    margin-right: 0.4em;
+    font-weight: 600;
+    opacity: 0.55;
+  }
+  .bbx__total-prices strong {
+    font-size: 1.35em;
+    font-weight: 900;
+  }
+  .bbx__saving {
+    width: 100%;
+    margin: 0;
+    font-size: 0.92em;
+    font-weight: 700;
+  }
+  .bbx__saving:empty {
+    display: none;
+  }
+  .bbx__saving.is-full span {
+    display: inline-block;
+    padding: 0.3em 0.85em;
+    border-radius: var(--bbx-btn-radius, 999px);
+    background: var(--bbx-selected);
+  }
+  .bbx__cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 58px;
+    padding: 0.5em 1em;
+    border: var(--bbx-border, 2px) solid var(--bbx-ink);
+    border-radius: var(--bbx-btn-radius, 999px);
+    background: var(--bbx-btn-fg);
+    color: var(--bbx-ink);
+    font-size: 1.1em;
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, transform 0.15s, opacity 0.2s;
+  }
+  .bbx__cta.is-ready {
+    background: var(--bbx-ink);
+    color: var(--bbx-btn-fg);
+  }
+  .bbx__cta.is-ready:hover {
+    transform: translateY(-1px);
+  }
+  .bbx__cta.is-loading {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+  .bbx__error {
+    margin: 0.75em 0 0;
+    color: #c0182c;
+    font-weight: 600;
+    text-align: center;
+  }
+  .bbx__error.is-notice {
+    color: inherit;
+    font-weight: 600;
+    opacity: 0.85;
+  }
+  .bbx__note {
+    margin: 1em 0 0;
+    font-size: 0.85em;
+    text-align: center;
+  }
+  .bbx__note a {
+    color: inherit;
+  }
+  .bbx__editor-hint {
+    padding: 1em;
+    border: 2px dashed currentColor;
+    border-radius: 12px;
+    text-align: center;
+  }
+
+  /* Mobile dock */
+  .bbx__dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    border-top: var(--bbx-border, 2px) solid var(--bbx-ink);
+    background: var(--bbx-panel-bg);
+    color: var(--bbx-ink);
+    transform: translateY(110%);
+    visibility: hidden;
+    transition: transform 0.25s ease, visibility 0s 0.25s;
+  }
+  .bbx__dock.is-visible {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.25s ease;
+  }
+  .bbx__dock-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    max-width: 48%;
+    padding: 4px 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    line-height: 1.15;
+    text-align: left;
+    cursor: pointer;
+  }
+  .bbx__dock-count {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 1.35em;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+  }
+  .bbx__dock-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.5em;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+  }
+  .bbx__step {
+    scroll-margin-top: calc(max(var(--bbx-offset, 0px), var(--bbx-header-h, 0px)) + var(--bbx-nav-h, 0px) + 12px);
+  }
+  .bbx__dock-status {
+    font-size: 0.78em;
+    font-weight: 700;
+  }
+  .bbx__dock .bbx__cta {
+    flex: 1;
+    min-height: 50px;
+    font-size: 1em;
+  }
+  @media screen and (min-width: 990px) {
+    .bbx__dock {
+      display: none;
+    }
+  }
+
+  @keyframes bbx-pop {
+    0% { transform: scale(0.85); }
+    60% { transform: scale(1.06); }
+    100% { transform: scale(1); }
+  }
+  @keyframes bbx-pulse {
+    0%, 100% { transform: none; }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bbx *,
+    .bbx *::before,
+    .bbx *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+{% endstylesheet %}
+
+{% javascript %}
+  (() => {
+    if (customElements.get('bundle-builder')) return;
+
+    class BundleBuilder extends HTMLElement {
+      connectedCallback() {
+        this.sizeButtons = [...this.querySelectorAll('[data-bbx-size]')];
+        this.cards = [...this.querySelectorAll('[data-bbx-card]')];
+        this.products = new Map();
+        this.cards.forEach((card) => {
+          const d = card.dataset;
+          if (!this.products.has(d.variantId)) {
+            this.products.set(d.variantId, {
+              id: d.variantId,
+              title: d.title,
+              price: Number(d.price) || 0,
+              image: d.image,
+              available: d.available === 'true',
+            });
+          }
+        });
+
+        // Prebuilt bundles can include products that aren't in any category, so register them too
+        this.presetButtons = [...this.querySelectorAll('[data-bbx-preset]')];
+        this.presetButtons.forEach((btn) => {
+          try {
+            btn.items = JSON.parse(btn.dataset.items || '[]');
+          } catch (e) {
+            btn.items = [];
+          }
+          btn.items.forEach((p) => {
+            if (!this.products.has(p.id)) this.products.set(p.id, { ...p, price: Number(p.price) || 0 });
+          });
+        });
+
+        const active = this.sizeButtons.findIndex((b) => b.getAttribute('aria-pressed') === 'true');
+        this.sizeIndex = Math.max(0, active);
+        this.slots = [];
+        this.restore();
+
+        this.onClick = this.onClick.bind(this);
+        this.onBlockSelect = this.onBlockSelect.bind(this);
+        this.addEventListener('click', this.onClick);
+        this.addEventListener('shopify:block:select', this.onBlockSelect);
+        this.watchDock();
+        this.watchNav();
+        this.watchSticky();
+        // Back/forward cache: a page left mid-redirect comes back with the button stuck on "Adding..."
+        this.onPageShow = (event) => {
+          if (!event.persisted) return;
+          this.adding = false;
+          this.querySelectorAll('[data-bbx-cta]').forEach((c) => {
+            c.classList.remove('is-loading');
+            delete c.dataset.locked;
+          });
+          this.restore();
+          this.render();
+        };
+        window.addEventListener('pageshow', this.onPageShow);
+        this.render();
+      }
+
+      disconnectedCallback() {
+        this.removeEventListener('click', this.onClick);
+        this.removeEventListener('shopify:block:select', this.onBlockSelect);
+        this.dockObserver?.disconnect();
+        this.navObserver?.disconnect();
+        document.removeEventListener('scroll', this.onScroll, { capture: true });
+        window.removeEventListener('resize', this.onScroll);
+        window.removeEventListener('load', this.onLayout);
+        window.removeEventListener('pageshow', this.onPageShow);
+        this.navResize?.disconnect();
+        cancelAnimationFrame(this.raf);
+      }
+
+      // ---- state ----
+      get size() {
+        return Number(this.sizeButtons[this.sizeIndex]?.dataset.bbxSize) || 0;
+      }
+      get discount() {
+        return Number(this.sizeButtons[this.sizeIndex]?.dataset.discount) || 0;
+      }
+      get code() {
+        return this.sizeButtons[this.sizeIndex]?.dataset.code || '';
+      }
+      get storageKey() {
+        return `bbx:${this.dataset.sectionId}:${location.pathname}`;
+      }
+
+      save() {
+        try {
+          sessionStorage.setItem(this.storageKey, JSON.stringify({ size: this.size, slots: this.slots }));
+        } catch (e) {}
+      }
+
+      restore() {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(this.storageKey) || 'null');
+          if (!saved) return;
+          const i = this.sizeButtons.findIndex((b) => Number(b.dataset.bbxSize) === saved.size);
+          if (i > -1) this.sizeIndex = i;
+          this.slots = (saved.slots || [])
+            .filter((id) => this.products.get(id)?.available)
+            .slice(0, this.size);
+        } catch (e) {}
+      }
+
+      // Smallest size bigger than the current one, or -1
+      nextSizeIndex() {
+        let best = -1;
+        this.sizeButtons.forEach((b, i) => {
+          const n = Number(b.dataset.bbxSize);
+          if (n > this.size && (best === -1 || n < Number(this.sizeButtons[best].dataset.bbxSize))) best = i;
+        });
+        return best;
+      }
+
+      canAddMore() {
+        if (this.slots.length < this.size) return true;
+        return this.dataset.autoUpgrade === 'true' && this.nextSizeIndex() > -1;
+      }
+
+      // ---- events ----
+      onClick(event) {
+        const target = event.target.closest(
+          '[data-bbx-size], [data-bbx-add], [data-bbx-inc], [data-bbx-dec], [data-bbx-remove], [data-bbx-clear], [data-bbx-preset], [data-bbx-empty], [data-bbx-cta], [data-bbx-view-box], [data-bbx-nav]'
+        );
+        if (!target || !this.contains(target)) return;
+        const card = target.closest('[data-bbx-card]');
+
+        if (target.hasAttribute('data-bbx-size')) return this.selectSize(this.sizeButtons.indexOf(target));
+        // Adding and removing swaps which button is visible, so move focus to its replacement
+        if (target.hasAttribute('data-bbx-add') || target.hasAttribute('data-bbx-inc')) {
+          this.add(card.dataset.variantId);
+          if (target.hasAttribute('data-bbx-add') && target.hidden) {
+            const inc = card.querySelector('[data-bbx-inc]');
+            (inc.disabled ? card.querySelector('[data-bbx-dec]') : inc).focus();
+          }
+          return;
+        }
+        if (target.hasAttribute('data-bbx-dec')) {
+          this.removeOne(card.dataset.variantId);
+          if (target.closest('[data-bbx-stepper]').hidden) card.querySelector('[data-bbx-add]').focus();
+          return;
+        }
+        if (target.hasAttribute('data-bbx-remove')) {
+          const index = Number(target.dataset.bbxRemove);
+          this.slots.splice(index, 1);
+          this.render();
+          const next = this.querySelectorAll('[data-bbx-slots] [data-bbx-remove]')[index] || this.querySelector('[data-bbx-panel] [data-bbx-cta]');
+          next?.focus();
+          return;
+        }
+        if (target.hasAttribute('data-bbx-clear')) {
+          this.slots = [];
+          return this.render();
+        }
+        if (target.hasAttribute('data-bbx-preset')) return this.applyPreset(target);
+        if (target.hasAttribute('data-bbx-empty')) return this.scrollToCatalog();
+        if (target.hasAttribute('data-bbx-nav')) {
+          const dest = this.querySelector(target.getAttribute('href'));
+          if (dest) {
+            event.preventDefault();
+            dest.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          return;
+        }
+        if (target.hasAttribute('data-bbx-view-box')) return this.scrollToBox();
+        if (target.hasAttribute('data-bbx-cta')) {
+          if (this.slots.length === this.size && this.size > 0) return this.addBox(target);
+          // From the mobile dock, show the box; from the panel, go pick products
+          if (target.closest('[data-bbx-dock]')) return this.scrollToBox();
+          this.scrollToCatalog();
+          this.pulseStatus();
+        }
+      }
+
+      onBlockSelect(event) {
+        const i = this.sizeButtons.indexOf(event.target.closest?.('[data-bbx-size]'));
+        if (i > -1) this.selectSize(i);
+        const preset = event.target.closest?.('[data-bbx-preset]');
+        if (preset) this.applyPreset(preset);
+      }
+
+      // Fill the box from a prebuilt bundle: pick its size (or the closest bigger one), repeat its products to fill
+      applyPreset(btn) {
+        const items = (btn.items || []).filter((p) => this.products.get(p.id)?.available);
+        if (!items.length || !this.sizeButtons.length) return;
+        const want = Number(btn.dataset.size) || items.length;
+        const sizes = this.sizeButtons.map((b) => Number(b.dataset.bbxSize));
+        let index = sizes.indexOf(want);
+        if (index === -1) {
+          const bigger = sizes.filter((n) => n > want);
+          index = sizes.indexOf(bigger.length ? Math.min(...bigger) : Math.max(...sizes));
+        }
+        this.sizeIndex = index;
+        this.slots = Array.from({ length: this.size }, (_, i) => items[i % items.length].id);
+        this.activePreset = btn;
+        this.presetSlots = null;
+        this.render({ note: (this.dataset.labelPresetAdded || '').replace('[name]', btn.dataset.name || '') });
+      }
+
+      // ---- actions ----
+      selectSize(i) {
+        if (i < 0) return;
+        this.sizeIndex = i;
+        if (this.slots.length > this.size) this.slots.length = this.size;
+        this.render();
+      }
+
+      add(id) {
+        if (!this.products.get(id)?.available) return;
+        let note = '';
+        if (this.slots.length >= this.size) {
+          const next = this.dataset.autoUpgrade === 'true' ? this.nextSizeIndex() : -1;
+          if (next === -1) return this.pulseStatus();
+          this.sizeIndex = next;
+          note = (this.dataset.labelUpgraded || '').replace('[size]', this.sizeName());
+        }
+        this.slots.push(id);
+        this.render({ added: this.slots.length - 1, note });
+      }
+
+      removeOne(id) {
+        const i = this.slots.lastIndexOf(id);
+        if (i === -1) return;
+        this.slots.splice(i, 1);
+        this.render();
+      }
+
+      sizeName() {
+        return (this.dataset.labelSize || '[size]').replace('[size]', this.size);
+      }
+
+      // Mobile dock: jump back up to the slots so shoppers can review the box
+      scrollToBox() {
+        const step = this.querySelector('[data-bbx-slots]')?.closest('.bbx__step');
+        if (!step) return;
+        step.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.pulseStatus();
+      }
+
+      scrollToCatalog() {
+        this.querySelector('[data-bbx-cat]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      pulseStatus() {
+        const status = this.querySelector('[data-bbx-status]');
+        status.classList.remove('is-pulse');
+        void status.offsetWidth;
+        status.classList.add('is-pulse');
+      }
+
+      // ---- rendering ----
+      render({ added = -1, note = '' } = {}) {
+        const size = this.size;
+        const count = this.slots.length;
+        const left = Math.max(0, size - count);
+        const full = size > 0 && count === size;
+        const fill = size ? count / size : 0;
+        const subtotal = this.slots.reduce((sum, id) => sum + (this.products.get(id)?.price || 0), 0);
+        // Shopify discounts each cart line (one per product) and rounds that line down, so match it exactly
+        const lines = this.slots.reduce((m, id) => m.set(id, (m.get(id) || 0) + 1), new Map());
+        const saving = full
+          ? [...lines].reduce((sum, [id, qty]) => sum + Math.floor((qty * (this.products.get(id)?.price || 0) * this.discount) / 100), 0)
+          : 0;
+        const fmt = (key, vars) =>
+          Object.entries(vars).reduce((str, [k, v]) => str.split(`[${k}]`).join(v), this.dataset[key] || '');
+
+        // Prebuilt bundle pill stays highlighted only while the box still matches it exactly
+        if (this.activePreset && this.presetSlots && this.presetSlots !== this.slots.join()) this.activePreset = null;
+        this.presetSlots = this.activePreset ? this.slots.join() : null;
+        this.presetButtons.forEach((b) => b.classList.toggle('is-active', b === this.activePreset));
+
+        // Size buttons
+        this.sizeButtons.forEach((b, i) => {
+          b.classList.toggle('is-active', i === this.sizeIndex);
+          b.setAttribute('aria-pressed', String(i === this.sizeIndex));
+        });
+
+        // Progress
+        const progress = this.querySelector('[data-bbx-progress]');
+        progress.style.setProperty('--bbx-fill', fill);
+        progress.classList.toggle('is-full', full);
+        this.querySelector('[data-bbx-count]').textContent = count;
+        this.querySelector('[data-bbx-target]').textContent = size;
+
+        // Status line
+        let status;
+        const next = this.dataset.autoUpgrade === 'true' ? this.sizeButtons[this.nextSizeIndex()] : null;
+        if (full && next) {
+          status = fmt('labelStatusNext', {
+            count: Number(next.dataset.bbxSize) - size,
+            percent: next.dataset.discount,
+            size: (this.dataset.labelSize || '[size]').replace('[size]', next.dataset.bbxSize),
+          });
+        } else if (full) status = fmt('labelStatusFull', { count: size, percent: this.discount });
+        else if (count === 0) status = fmt('labelStatusEmpty', { count: size, percent: this.discount });
+        else status = fmt('labelStatusPartial', { count: left, percent: this.discount });
+        if (note) status = note;
+        const statusEl = this.querySelector('[data-bbx-status]');
+        statusEl.textContent = status;
+        statusEl.classList.toggle('is-full', full);
+
+        // Slots
+        this.renderSlots(size, added);
+        this.querySelector('[data-bbx-clear]').hidden = count === 0;
+
+        // Cards
+        const counts = this.slots.reduce((m, id) => m.set(id, (m.get(id) || 0) + 1), new Map());
+        const more = this.canAddMore();
+        this.cards.forEach((card) => {
+          const p = this.products.get(card.dataset.variantId);
+          const qty = counts.get(card.dataset.variantId) || 0;
+          card.classList.toggle('is-selected', qty > 0);
+          card.querySelector('[data-bbx-add]').hidden = qty > 0;
+          card.querySelector('[data-bbx-add]').disabled = !p.available || !more;
+          card.querySelector('[data-bbx-stepper]').hidden = qty === 0;
+          card.querySelector('[data-bbx-qty]').textContent = qty;
+          card.querySelector('[data-bbx-inc]').disabled = !more;
+        });
+
+        // Totals
+        const compare = this.querySelector('[data-bbx-compare]');
+        compare.hidden = !saving;
+        compare.textContent = this.money(subtotal);
+        this.querySelector('[data-bbx-price]').textContent = this.money(subtotal - saving);
+        const savingEl = this.querySelector('[data-bbx-saving]');
+        savingEl.classList.toggle('is-full', full && saving > 0);
+        savingEl.textContent = '';
+        if (this.discount > 0 && size > 0) {
+          const span = document.createElement('span');
+          span.textContent = full
+            ? fmt('labelSavingFull', { amount: this.money(saving), percent: this.discount })
+            : fmt('labelSavingPartial', { count: left, percent: this.discount });
+          savingEl.append(span);
+        }
+
+        // Add buttons (panel + dock)
+        const ctaText = full ? fmt('labelCtaFull', { price: this.money(subtotal - saving) }) : fmt('labelCtaMore', { count: left });
+        this.querySelectorAll('[data-bbx-cta]').forEach((cta) => {
+          if (cta.classList.contains('is-loading') || cta.dataset.locked) return;
+          cta.textContent = ctaText;
+          cta.classList.toggle('is-ready', full);
+          cta.setAttribute('aria-disabled', String(!full));
+        });
+
+        // Dock
+        this.querySelector('[data-bbx-dock-count]').textContent = `${count}/${size}`;
+        this.querySelector('[data-bbx-dock-status]').textContent = full && saving
+          ? fmt('labelSavingFull', { amount: this.money(saving), percent: this.discount })
+          : status;
+
+        this.save();
+      }
+
+      // Updates slots in place: a slot whose product hasn't changed keeps its element, so images don't flash
+      renderSlots(size, added) {
+        const list = this.querySelector('[data-bbx-slots]');
+        const current = [...list.children];
+        for (let i = 0; i < size; i++) {
+          const id = this.slots[i] || '';
+          const old = current[i];
+          if (old && old.dataset.bbxSlot === id && i !== added) {
+            old.querySelector('[data-bbx-remove]')?.setAttribute('data-bbx-remove', i);
+            continue;
+          }
+          const li = this.buildSlot(id, i, i === added);
+          if (old) old.replaceWith(li);
+          else list.append(li);
+        }
+        current.slice(size).forEach((li) => li.remove());
+        // Three per row reads better than 4 + 2 for sizes like 6 or 9
+        list.classList.toggle('is-cols-3', size % 4 !== 0 && size % 3 === 0);
+      }
+
+      buildSlot(id, i, isNew) {
+        const li = document.createElement('li');
+        li.className = 'bbx__slot';
+        li.dataset.bbxSlot = id;
+        const p = this.products.get(id);
+        if (p) {
+          if (p.image) {
+            const img = document.createElement('img');
+            img.className = 'bbx__slot-img';
+            img.src = p.image;
+            img.alt = p.title;
+            img.width = 150;
+            img.height = 150;
+            li.append(img);
+          } else {
+            li.title = p.title;
+          }
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'bbx__slot-remove';
+          remove.dataset.bbxRemove = i;
+          remove.setAttribute('aria-label', `Remove ${p.title}`);
+          remove.textContent = '×';
+          li.append(remove);
+          if (isNew) li.classList.add('is-new');
+        } else {
+          const empty = document.createElement('button');
+          empty.type = 'button';
+          empty.className = 'bbx__slot-empty';
+          empty.dataset.bbxEmpty = '';
+          empty.setAttribute('aria-label', this.dataset.labelChoose || '');
+          empty.textContent = '+';
+          li.append(empty);
+        }
+        return li;
+      }
+
+      // Formats cents in the shopper's currency. Liquid renders a sample (123456789 | money) in the
+      // presentment currency, so symbol, separators and decimals follow Markets / multi-currency.
+      money(cents) {
+        if (!this.moneyFormat) {
+          const sample = this.dataset.moneySample || '$1,234,567.89';
+          const m = sample.match(/1(\D?)234\D?56[78](?:(\D)89)?/);
+          this.moneyFormat = m
+            ? { prefix: sample.slice(0, m.index), suffix: sample.slice(m.index + m[0].length), thousands: m[1], point: m[2] || '', decimals: m[2] ? 2 : 0 }
+            : { prefix: '$', suffix: '', thousands: ',', point: '.', decimals: 2 };
+        }
+        const f = this.moneyFormat;
+        const [whole, frac] = (cents / 100).toFixed(f.decimals).split('.');
+        return f.prefix + whole.replace(/\B(?=(\d{3})+(?!\d))/g, f.thousands) + (frac ? f.point + frac : '') + f.suffix;
+      }
+
+      // ---- cart ----
+      async addBox(button) {
+        if (this.adding) return;
+        this.adding = true;
+        const ctas = [...this.querySelectorAll('[data-bbx-cta]')];
+        const error = this.querySelector('[data-bbx-error]');
+        error.hidden = true;
+        error.classList.remove('is-notice');
+        ctas.forEach((c) => {
+          c.classList.add('is-loading');
+          c.textContent = this.dataset.labelCtaAdding;
+        });
+
+        const items = [...this.slots.reduce((m, id) => m.set(id, (m.get(id) || 0) + 1), new Map())].map(
+          ([id, quantity]) => ({ id: Number(id), quantity })
+        );
+
+        // Themes on Shopify's standard cart events (e.g. Horizon) refresh their cart icon and drawer from this
+        let settle;
+        const promise = new Promise((resolve, reject) => (settle = { resolve, reject }));
+        promise.catch(() => {});
+        const event = new Event('shopify:cart:lines-update', { bubbles: true });
+        Object.assign(event, {
+          action: 'add',
+          context: 'product',
+          lines: items.map((i) => ({ merchandiseId: `gid://shopify/ProductVariant/${i.id}`, quantity: i.quantity })),
+          promise,
+        });
+        if (this.dataset.afterAdd === 'drawer') button.dispatchEvent(event);
+
+        // 1. The add itself. Only this step can fail the box; Shopify's own message (like a stock limit) is shown.
+        let data;
+        try {
+          const res = await fetch(`${this.dataset.cartAddUrl}.js`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ items, sections: 'cart-icon-bubble' }),
+          });
+          data = await res.json().catch(() => ({}));
+          if (!res.ok) throw Object.assign(new Error(data.description || data.message || ''), { fromShopify: true });
+        } catch (err) {
+          settle.reject(err);
+          this.adding = false;
+          ctas.forEach((c) => c.classList.remove('is-loading'));
+          error.textContent = (err.fromShopify && err.message) || this.dataset.labelError;
+          error.hidden = false;
+          this.render();
+          return;
+        }
+
+        // 2. The box is in the cart. Nothing below may report failure, or a retry would add it twice.
+        let codeOk = true;
+        let cart = null;
+        try {
+          codeOk = await this.applyCode(this.code);
+          cart = await this.fetchCart();
+          settle.resolve({ cart: this.toStandardCart(cart), detail: { itemCount: cart.item_count } });
+        } catch (e) {
+          settle.reject(e);
+        }
+        try {
+          this.notifyTheme(cart, data.sections);
+        } catch (e) {}
+
+        // Empty the box before leaving, so the Back button doesn't bring back a box that's already in the cart
+        this.slots = [];
+        this.save();
+        const after = this.dataset.afterAdd;
+        if (after === 'cart') return (window.location.href = this.dataset.cartUrl);
+        if (after === 'checkout') return (window.location.href = `${this.dataset.rootUrl.replace(/\/$/, '')}/checkout`);
+        if (after === 'drawer') this.openThemeCart(items[0]?.id);
+
+        this.adding = false;
+        ctas.forEach((c) => {
+          c.classList.remove('is-loading');
+          c.dataset.locked = 'true';
+          c.textContent = this.dataset.labelCtaAdded;
+        });
+        if (!codeOk) {
+          error.textContent = this.dataset.labelCodeError;
+          error.classList.add('is-notice');
+          error.hidden = false;
+        }
+        this.render();
+        setTimeout(() => {
+          ctas.forEach((c) => delete c.dataset.locked);
+          this.render();
+        }, 2500);
+      }
+
+      // Apply this size's code (or none), dropping other box codes and keeping unrelated codes already on the cart.
+      // Returns false when the code didn't stick (typo, expired, beaten by a non-combining discount).
+      async applyCode(code) {
+        try {
+          const cart = await this.fetchCart();
+          const ours = new Set(this.sizeButtons.map((b) => (b.dataset.code || '').toLowerCase()).filter(Boolean));
+          const existing = (cart.discount_codes || []).map((d) => d.code);
+          const keep = existing.filter((c) => !ours.has(c.toLowerCase()));
+          if (!code && keep.length === existing.length) return true;
+          const res = await fetch(`${this.dataset.cartUpdateUrl}.js`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ discount: [...keep, code].filter(Boolean).join(',') }),
+          });
+          if (!code) return true;
+          const updated = await res.json();
+          const hit = (updated.discount_codes || []).find((d) => d.code.toLowerCase() === code.toLowerCase());
+          return Boolean(res.ok && hit && hit.applicable);
+        } catch (e) {
+          return !code;
+        }
+      }
+
+      async fetchCart() {
+        const res = await fetch(`${this.dataset.cartUrl}.js`, { headers: { Accept: 'application/json' } });
+        return res.json();
+      }
+
+      toStandardCart(cart) {
+        const money = (cents) => ({ amount: (cents / 100).toFixed(2), currencyCode: cart.currency });
+        return {
+          id: cart.token,
+          totalQuantity: cart.item_count,
+          cost: { totalAmount: money(cart.total_price) },
+          lines: cart.items.map((item) => ({
+            id: item.key,
+            quantity: item.quantity,
+            cost: { totalAmount: money(item.final_line_price) },
+          })),
+          discountCodes: (cart.discount_codes || []).map((d) => ({ code: d.code, applicable: d.applicable })),
+        };
+      }
+
+      // Let other theme families know the cart changed
+      notifyTheme(cart, sections) {
+        // Dawn and Dawn-based themes: swap in the re-rendered cart icon and publish to their pub/sub
+        const bubble = document.getElementById('cart-icon-bubble');
+        const html = sections?.['cart-icon-bubble'];
+        if (bubble && html) {
+          const fresh = new DOMParser().parseFromString(html, 'text/html').querySelector('.shopify-section');
+          if (fresh) bubble.innerHTML = fresh.innerHTML;
+        }
+        if (cart && typeof window.publish === 'function') {
+          try {
+            window.publish('cart-update', { source: 'bundle-builder', cartData: cart });
+          } catch (e) {}
+        }
+        // Everyone else: listen for this and refresh your cart UI
+        document.dispatchEvent(new CustomEvent('bundle-builder:cart:added', { bubbles: true, detail: { cart } }));
+      }
+
+      // Optional extras: open the theme's cart drawer. Each branch is feature-detected and does nothing elsewhere.
+      // To support another theme, add a branch here (see AGENTS.md, "Supporting another theme's cart").
+      async openThemeCart(variantId) {
+        // Horizon family: <theme-drawer id="cart-drawer"> with open() / isOpen. Opens even when its auto-open setting is off.
+        const themeDrawer = document.querySelector('theme-drawer#cart-drawer');
+        if (themeDrawer && typeof themeDrawer.open === 'function') {
+          requestAnimationFrame(() => {
+            if (!themeDrawer.isOpen) themeDrawer.open();
+          });
+          return;
+        }
+        // Dawn family (Dawn, Refresh, Sense, Craft, Studio, Taste, Crave, Colorblock, Ride, Origin, Spotlight, Publisher):
+        // <cart-drawer> with renderContents(). Re-render its sections after the discount is applied, then open it.
+        const dawnDrawer = document.querySelector('cart-drawer');
+        if (dawnDrawer && typeof dawnDrawer.renderContents === 'function' && typeof dawnDrawer.getSectionsToRender === 'function') {
+          try {
+            const ids = dawnDrawer.getSectionsToRender().map((section) => section.id);
+            const res = await fetch(`${window.location.pathname}?sections=${ids.join(',')}`);
+            const sections = await res.json();
+            dawnDrawer.classList.remove('is-empty');
+            dawnDrawer.renderContents({ id: variantId, sections });
+          } catch (e) {}
+        }
+      }
+
+      // ---- mobile dock + nav highlight ----
+      watchDock() {
+        const dock = this.querySelector('[data-bbx-dock]');
+        const panelCta = this.querySelector('[data-bbx-panel] [data-bbx-cta]');
+        const catalog = this.querySelector('[data-bbx-catalog]');
+        if (!dock || !panelCta || !catalog || !('IntersectionObserver' in window)) return;
+        const seen = new Map();
+        this.dockObserver = new IntersectionObserver((entries) => {
+          entries.forEach((e) => seen.set(e.target, e.isIntersecting));
+          dock.classList.toggle('is-visible', Boolean(seen.get(catalog)) && !seen.get(panelCta));
+        });
+        this.dockObserver.observe(panelCta);
+        this.dockObserver.observe(catalog);
+      }
+
+      watchNav() {
+        const pills = [...this.querySelectorAll('[data-bbx-nav]')];
+        if (!pills.length || !('IntersectionObserver' in window)) return;
+        this.navObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((e) => {
+              if (!e.isIntersecting) return;
+              const pill = pills.find((p) => p.getAttribute('href') === `#${e.target.id}`);
+              pills.forEach((p) => p.classList.toggle('is-active', p === pill));
+              this.revealPill(pill);
+            });
+          },
+          { rootMargin: '-35% 0px -60% 0px' }
+        );
+        this.querySelectorAll('[data-bbx-cat]').forEach((c) => this.navObserver.observe(c));
+      }
+
+      // Phones: the pill row scrolls sideways, so slide the active pill into view
+      revealPill(pill) {
+        const nav = pill?.parentElement;
+        if (!nav || nav.scrollWidth <= nav.clientWidth) return;
+        const left = pill.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft;
+        nav.scrollTo({ left: left - (nav.clientWidth - pill.offsetWidth) / 2, behavior: 'smooth' });
+      }
+
+      // Sticky category bar: track the theme's sticky header so the bar (and the panel below it) sit just under it
+      watchSticky() {
+        this.nav = this.classList.contains('bbx--sticky-nav') ? this.querySelector('.bbx__nav') : null;
+        this.onScroll = () => {
+          if (this.raf) return;
+          this.raf = requestAnimationFrame(() => {
+            this.raf = 0;
+            this.measureSticky();
+          });
+        };
+        // Capture phase catches scrolling on any element: some themes (Horizon) scroll a wrapper, not the window
+        document.addEventListener('scroll', this.onScroll, { capture: true, passive: true });
+        window.addEventListener('resize', this.onScroll);
+        // Re-measure when the header or bar size settles (web fonts, images, wrapping pills)
+        this.onLayout = () => {
+          this.style.setProperty('--bbx-header-h', `${this.stickyHeaderHeight()}px`);
+          this.onScroll();
+        };
+        window.addEventListener('load', this.onLayout);
+        document.fonts?.ready.then(this.onLayout);
+        if (this.nav && 'ResizeObserver' in window) {
+          this.navResize = new ResizeObserver(this.onScroll);
+          this.navResize.observe(this.nav);
+        }
+        this.measureSticky();
+        this.style.setProperty('--bbx-header-h', `${this.stickyHeaderHeight()}px`);
+      }
+
+      measureSticky() {
+        const offset = this.headerBottom();
+        if (offset !== this.lastOffset) {
+          this.lastOffset = offset;
+          this.style.setProperty('--bbx-offset', `${offset}px`);
+        }
+        if (!this.nav) return;
+        const navH = this.nav.offsetHeight;
+        if (navH !== this.lastNavH) {
+          this.lastNavH = navH;
+          this.style.setProperty('--bbx-nav-h', `${navH}px`);
+        }
+        const top = this.nav.getBoundingClientRect().top;
+        this.nav.classList.toggle('is-stuck', top <= offset + 1 && this.getBoundingClientRect().top < offset);
+      }
+
+      // Height of the theme's sticky header even before it has stuck, so jumps (category links, "View box")
+      // land below it. Scans the top of the screen for fixed/sticky elements outside this section.
+      stickyHeaderHeight() {
+        const x = Math.round(window.innerWidth / 2);
+        const seen = new Set();
+        let height = 0;
+        for (let y = 1; y < window.innerHeight * 0.3; y += 8) {
+          for (const el of document.elementsFromPoint(x, y)) {
+            if (this.contains(el)) continue;
+            for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+              const pos = getComputedStyle(n).position;
+              if (pos !== 'fixed' && pos !== 'sticky') continue;
+              if (!seen.has(n)) {
+                seen.add(n);
+                const r = n.getBoundingClientRect();
+                if (r.height < window.innerHeight * 0.4) height = Math.max(height, r.height);
+              }
+              break;
+            }
+          }
+        }
+        return Math.round(height);
+      }
+
+      // Bottom edge of whatever fixed/sticky bar (the theme header) currently covers the top of the screen
+      headerBottom() {
+        let bottom = 0;
+        for (const el of document.elementsFromPoint(Math.round(window.innerWidth / 2), 1)) {
+          if (this.contains(el)) continue;
+          for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+            const pos = getComputedStyle(n).position;
+            if (pos !== 'fixed' && pos !== 'sticky') continue;
+            const r = n.getBoundingClientRect();
+            if (r.top <= 1 && r.height < window.innerHeight * 0.4) bottom = Math.max(bottom, r.bottom);
+            break;
+          }
+        }
+        return Math.max(0, Math.round(bottom));
+      }
+    }
+
+    customElements.define('bundle-builder', BundleBuilder);
+  })();
+{% endjavascript %}
+
+{% schema %}
+{
+  "name": "Bundle builder",
+  "tag": "section",
+  "class": "bbx-section",
+  "max_blocks": 20,
+  "settings": [
+    {
+      "type": "header",
+      "content": "Content"
+    },
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Build your box"
+    },
+    {
+      "type": "inline_richtext",
+      "id": "subheading",
+      "label": "Subheading",
+      "default": "Pick a box size, fill it with favorites, and save more the bigger you go."
+    },
+    {
+      "type": "text",
+      "id": "presets_heading",
+      "label": "Prebuilt bundles heading",
+      "info": "Shows above the products when you add Prebuilt bundle blocks.",
+      "default": "Fill your box with our best-selling bundles"
+    },
+    {
+      "type": "inline_richtext",
+      "id": "footnote",
+      "label": "Note under the button",
+      "default": "Free returns on every box."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_nav",
+      "label": "Show category links",
+      "info": "Pill links that jump to each product category. Shows when there are 2+ categories.",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "sticky_nav",
+      "label": "Keep category links on screen while scrolling",
+      "default": true
+    },
+    {
+      "type": "header",
+      "content": "Colors"
+    },
+    {
+      "type": "paragraph",
+      "content": "Four colors carry the look: background, brand color, text on brand color and highlight. The other lines, tints and the progress track are mixed from them automatically. Box size badges have their own colors in each Box size block."
+    },
+    {
+      "type": "color",
+      "id": "color_bg",
+      "label": "Page background",
+      "default": "#DCD8FB"
+    },
+    {
+      "type": "color",
+      "id": "color_ink",
+      "label": "Brand color",
+      "default": "#3B0E8C",
+      "info": "Text, borders, buttons and the progress bar. Pick something dark enough to read on the background."
+    },
+    {
+      "type": "color",
+      "id": "color_button_text",
+      "label": "Text on brand color",
+      "default": "#FFFFFF",
+      "info": "Button labels and anything sitting on the brand color. Usually white."
+    },
+    {
+      "type": "color",
+      "id": "color_selected",
+      "label": "Highlight",
+      "default": "#76F8FB",
+      "info": "Products in the box, the savings badge and the full-box message. A bright accent works best."
+    },
+    {
+      "type": "color",
+      "id": "color_panel",
+      "label": "Builder panel background",
+      "default": "#DCD8FB"
+    },
+    {
+      "type": "color",
+      "id": "color_card",
+      "label": "Product card background",
+      "default": "#DCD8FB"
+    },
+    {
+      "type": "header",
+      "content": "Style"
+    },
+    {
+      "type": "range",
+      "id": "radius",
+      "label": "Corner roundness",
+      "info": "Cards, the builder panel and box slots.",
+      "min": 0,
+      "max": 32,
+      "step": 2,
+      "unit": "px",
+      "default": 18
+    },
+    {
+      "type": "select",
+      "id": "button_shape",
+      "label": "Button shape",
+      "info": "Buttons, size picker, category links and badges.",
+      "options": [
+        {
+          "value": "pill",
+          "label": "Pill"
+        },
+        {
+          "value": "rounded",
+          "label": "Rounded"
+        },
+        {
+          "value": "square",
+          "label": "Square"
+        }
+      ],
+      "default": "pill"
+    },
+    {
+      "type": "range",
+      "id": "border_width",
+      "label": "Border width",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "unit": "px",
+      "default": 2
+    },
+    {
+      "type": "header",
+      "content": "Typography"
+    },
+    {
+      "type": "checkbox",
+      "id": "uppercase",
+      "label": "Uppercase titles and buttons",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "use_custom_font",
+      "label": "Use a custom font",
+      "info": "Off uses your theme's font.",
+      "default": false
+    },
+    {
+      "type": "font_picker",
+      "id": "font",
+      "label": "Font",
+      "default": "poppins_n4",
+      "visible_if": "{{ section.settings.use_custom_font }}"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "label": "Products per row, desktop",
+      "min": 2,
+      "max": 5,
+      "step": 1,
+      "default": 3
+    },
+    {
+      "type": "select",
+      "id": "columns_mobile",
+      "label": "Products per row, mobile",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "2",
+          "label": "2"
+        }
+      ],
+      "default": "2"
+    },
+    {
+      "type": "select",
+      "id": "image_fit",
+      "label": "Product image fit",
+      "options": [
+        {
+          "value": "contain",
+          "label": "Show whole image (packshots)"
+        },
+        {
+          "value": "cover",
+          "label": "Fill the square (photos)"
+        }
+      ],
+      "default": "contain"
+    },
+    {
+      "type": "range",
+      "id": "max_width",
+      "label": "Max width",
+      "min": 900,
+      "max": 1800,
+      "step": 20,
+      "unit": "px",
+      "default": 1400
+    },
+    {
+      "type": "range",
+      "id": "sticky_top",
+      "label": "Builder panel gap from top",
+      "info": "Desktop. Space between the panel and the theme's sticky header (detected automatically) or category links.",
+      "min": 0,
+      "max": 200,
+      "step": 4,
+      "unit": "px",
+      "default": 16
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top padding",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 48
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 120,
+      "step": 4,
+      "unit": "px",
+      "default": 64
+    },
+    {
+      "type": "header",
+      "content": "Box behavior"
+    },
+    {
+      "type": "checkbox",
+      "id": "auto_upgrade",
+      "label": "Move up a size when the box is full",
+      "info": "Adding to a full box switches to the next bigger size instead of blocking the add.",
+      "default": true
+    },
+    {
+      "type": "select",
+      "id": "after_add",
+      "label": "After adding the box",
+      "info": "Drawer opens on Horizon and Dawn-family themes. On other themes the shopper stays on the page and sees \"Added to cart\". See AGENTS.md to add your theme.",
+      "options": [
+        {
+          "value": "cart",
+          "label": "Go to the cart page"
+        },
+        {
+          "value": "drawer",
+          "label": "Stay on the page and open the cart drawer"
+        },
+        {
+          "value": "checkout",
+          "label": "Go straight to checkout"
+        }
+      ],
+      "default": "cart"
+    },
+    {
+      "type": "header",
+      "content": "Text and translations"
+    },
+    {
+      "type": "paragraph",
+      "content": "Every word shoppers see. Words in [brackets] are filled in automatically."
+    },
+    {
+      "type": "text",
+      "id": "label_step_size",
+      "label": "Step 1 title",
+      "default": "Choose your box size"
+    },
+    {
+      "type": "text",
+      "id": "label_step_products",
+      "label": "Step 2 title",
+      "default": "Choose your products"
+    },
+    {
+      "type": "text",
+      "id": "label_size",
+      "label": "Size name",
+      "info": "[size] is the number of items.",
+      "default": "[size] Pack"
+    },
+    {
+      "type": "text",
+      "id": "label_size_save",
+      "label": "Size discount",
+      "info": "[percent] is the size's discount.",
+      "default": "Save [percent]%"
+    },
+    {
+      "type": "text",
+      "id": "label_status_empty",
+      "label": "Status, empty box",
+      "info": "[count] is the box size, [percent] its discount.",
+      "default": "Add [count] items to unlock [percent]% off"
+    },
+    {
+      "type": "text",
+      "id": "label_status_partial",
+      "label": "Status, filling",
+      "info": "[count] is how many are left, [percent] the discount.",
+      "default": "Add [count] more to unlock [percent]% off"
+    },
+    {
+      "type": "text",
+      "id": "label_status_next",
+      "label": "Status, full with a bigger size",
+      "info": "Shown when moving up a size is on. [count] is how many more reach the next size, [size] its name, [percent] its discount.",
+      "default": "Box full! Add [count] more to unlock [percent]% off with the [size]"
+    },
+    {
+      "type": "text",
+      "id": "label_status_full",
+      "label": "Status, full at the biggest size",
+      "default": "Your box is full. Best deal unlocked!"
+    },
+    {
+      "type": "text",
+      "id": "label_upgraded",
+      "label": "Status, moved up a size",
+      "info": "[size] is the new size name.",
+      "default": "Upgraded to the [size]!"
+    },
+    {
+      "type": "text",
+      "id": "label_clear",
+      "label": "Clear box link",
+      "default": "Clear all"
+    },
+    {
+      "type": "text",
+      "id": "label_view_box",
+      "label": "Mobile bar, view box link",
+      "default": "View box"
+    },
+    {
+      "type": "text",
+      "id": "label_preset_added",
+      "label": "Status, prebuilt bundle added",
+      "info": "[name] is the bundle's name.",
+      "default": "[name] added! Swap anything you like."
+    },
+    {
+      "type": "text",
+      "id": "label_total",
+      "label": "Total",
+      "default": "Total"
+    },
+    {
+      "type": "text",
+      "id": "label_saving_partial",
+      "label": "Savings, filling",
+      "info": "[count] is how many are left, [percent] the discount.",
+      "default": "Fill your box to save [percent]%"
+    },
+    {
+      "type": "text",
+      "id": "label_saving_full",
+      "label": "Savings, full box",
+      "info": "[amount] is the money saved, [percent] the discount.",
+      "default": "You're saving [amount]"
+    },
+    {
+      "type": "text",
+      "id": "label_cta_more",
+      "label": "Button, filling",
+      "info": "[count] is how many are left.",
+      "default": "Add [count] more"
+    },
+    {
+      "type": "text",
+      "id": "label_cta_full",
+      "label": "Button, full box",
+      "info": "[price] is the box total after the discount.",
+      "default": "Add box to cart · [price]"
+    },
+    {
+      "type": "text",
+      "id": "label_cta_adding",
+      "label": "Button, adding",
+      "default": "Adding..."
+    },
+    {
+      "type": "text",
+      "id": "label_cta_added",
+      "label": "Button, added",
+      "default": "Added to cart!"
+    },
+    {
+      "type": "text",
+      "id": "label_error",
+      "label": "Error message",
+      "default": "Couldn't add your box. Please try again."
+    },
+    {
+      "type": "text",
+      "id": "label_code_error",
+      "label": "Notice, discount didn't apply",
+      "info": "Shown after adding when the box's discount code didn't apply (typo, expired, or beaten by another discount).",
+      "default": "Your box is in the cart, but the box discount couldn't be applied."
+    },
+    {
+      "type": "text",
+      "id": "label_add",
+      "label": "Product add button",
+      "default": "+ Add"
+    },
+    {
+      "type": "text",
+      "id": "label_sold_out",
+      "label": "Sold out",
+      "default": "Sold out"
+    },
+    {
+      "type": "text",
+      "id": "label_nav",
+      "label": "Category links name (screen readers)",
+      "default": "Product categories"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "size",
+      "name": "Box size",
+      "limit": 4,
+      "settings": [
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Items in the box",
+          "min": 1,
+          "max": 24,
+          "step": 1,
+          "default": 4
+        },
+        {
+          "type": "range",
+          "id": "discount",
+          "label": "Discount",
+          "min": 0,
+          "max": 80,
+          "step": 1,
+          "unit": "%",
+          "default": 10
+        },
+        {
+          "type": "text",
+          "id": "code",
+          "label": "Discount code",
+          "info": "Create it in Discounts first (Amount off products, same percent, minimum quantity = items in the box). It's applied when the box is added."
+        },
+        {
+          "type": "checkbox",
+          "id": "default",
+          "label": "Selected when the page loads",
+          "default": false
+        },
+        {
+          "type": "text",
+          "id": "badge",
+          "label": "Badge",
+          "info": "For example Most popular or Best value."
+        },
+        {
+          "type": "color_background",
+          "id": "badge_bg",
+          "label": "Badge background",
+          "info": "Supports gradients.",
+          "visible_if": "{{ block.settings.badge != blank }}"
+        },
+        {
+          "type": "color",
+          "id": "badge_color",
+          "label": "Badge background (solid)",
+          "default": "#F5F28C",
+          "visible_if": "{{ block.settings.badge != blank }}"
+        },
+        {
+          "type": "color",
+          "id": "badge_text",
+          "label": "Badge text",
+          "default": "#3B0E8C",
+          "visible_if": "{{ block.settings.badge != blank }}"
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "name": "Product category",
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Title",
+          "default": "Best sellers"
+        },
+        {
+          "type": "collection",
+          "id": "collection",
+          "label": "Collection"
+        },
+        {
+          "type": "product_list",
+          "id": "products",
+          "label": "Or pick products",
+          "info": "Overrides the collection.",
+          "limit": 50
+        },
+        {
+          "type": "range",
+          "id": "limit",
+          "label": "Max products",
+          "min": 1,
+          "max": 50,
+          "step": 1,
+          "default": 12
+        }
+      ]
+    },
+    {
+      "type": "preset",
+      "name": "Prebuilt bundle",
+      "limit": 6,
+      "settings": [
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Name",
+          "default": "All star"
+        },
+        {
+          "type": "range",
+          "id": "size",
+          "label": "Box size",
+          "info": "Match one of your box sizes. Products repeat in order to fill the box.",
+          "min": 1,
+          "max": 24,
+          "step": 1,
+          "default": 6
+        },
+        {
+          "type": "product_list",
+          "id": "products",
+          "label": "Products",
+          "limit": 24
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Bundle builder",
+      "settings": {
+        "color_bg": "#DCD8FB",
+        "color_ink": "#3B0E8C",
+        "color_button_text": "#FFFFFF",
+        "color_selected": "#76F8FB",
+        "color_panel": "#DCD8FB",
+        "color_card": "#DCD8FB"
+      },
+      "blocks": [
+        {
+          "type": "size",
+          "settings": {
+            "size": 4,
+            "discount": 10,
+            "default": true
+          }
+        },
+        {
+          "type": "size",
+          "settings": {
+            "size": 6,
+            "discount": 15,
+            "badge": "Most popular",
+            "badge_color": "#76F8FB",
+            "badge_text": "#3B0E8C"
+          }
+        },
+        {
+          "type": "size",
+          "settings": {
+            "size": 8,
+            "discount": 20,
+            "badge": "Best value",
+            "badge_color": "#C433D6",
+            "badge_text": "#FFFFFF"
+          }
+        },
+        {
+          "type": "category",
+          "settings": {
+            "title": "Best sellers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bundle builder: clean",
+      "settings": {
+        "color_bg": "#FFFFFF",
+        "color_ink": "#111111",
+        "color_button_text": "#FFFFFF",
+        "color_selected": "#FFE55C",
+        "color_panel": "#F5F5F2",
+        "color_card": "#FFFFFF",
+        "radius": 8,
+        "button_shape": "rounded",
+        "border_width": 1,
+        "uppercase": false
+      },
+      "blocks": [
+        {
+          "type": "size",
+          "settings": {
+            "size": 4,
+            "discount": 10,
+            "default": true
+          }
+        },
+        {
+          "type": "size",
+          "settings": {
+            "size": 6,
+            "discount": 15,
+            "badge": "Most popular",
+            "badge_color": "#FFE55C",
+            "badge_text": "#111111"
+          }
+        },
+        {
+          "type": "size",
+          "settings": {
+            "size": 8,
+            "discount": 20,
+            "badge": "Best value",
+            "badge_color": "#111111",
+            "badge_text": "#FFFFFF"
+          }
+        },
+        {
+          "type": "category",
+          "settings": {
+            "title": "Best sellers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bundle builder: earthy",
+      "settings": {
+        "color_bg": "#F4EFE6",
+        "color_ink": "#2F4A3A",
+        "color_button_text": "#F4EFE6",
+        "color_selected": "#F2B880",
+        "color_panel": "#ECE4D6",
+        "color_card": "#FBF8F2",
+        "radius": 14,
+        "button_shape": "pill",
+        "border_width": 2,
+        "uppercase": false
+      },
+      "blocks": [
+        {
+          "type": "size",
+          "settings": {
+            "size": 4,
+            "discount": 10,
+            "default": true
+          }
+        },
+        {
+          "type": "size",
+          "settings": {
+            "size": 6,
+            "discount": 15,
+            "badge": "Most popular",
+            "badge_color": "#F2B880",
+            "badge_text": "#2F4A3A"
+          }
+        },
+        {
+          "type": "size",
+          "settings": {
+            "size": 8,
+            "discount": 20,
+            "badge": "Best value",
+            "badge_color": "#2F4A3A",
+            "badge_text": "#F4EFE6"
+          }
+        },
+        {
+          "type": "category",
+          "settings": {
+            "title": "Best sellers"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}

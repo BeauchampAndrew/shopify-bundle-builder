@@ -1,0 +1,158 @@
+{
+  "sections": {
+    "main": {
+      "type": "bundle-builder",
+      "blocks": {
+        "size_4": {
+          "type": "size",
+          "settings": {
+            "size": 4,
+            "discount": 10,
+            "code": "BUNDLE4",
+            "default": true
+          }
+        },
+        "size_6": {
+          "type": "size",
+          "settings": {
+            "size": 6,
+            "discount": 15,
+            "code": "BUNDLE6",
+            "badge": "Most popular",
+            "badge_bg": "linear-gradient(90deg, rgba(184, 241, 245, 1) 0%, rgba(247, 245, 154, 1) 100%)",
+            "badge_text": "#3B0E8C"
+          }
+        },
+        "size_8": {
+          "type": "size",
+          "settings": {
+            "size": 8,
+            "discount": 20,
+            "code": "BUNDLE8",
+            "badge": "Best value",
+            "badge_bg": "linear-gradient(90deg, rgba(214, 60, 224, 1) 0%, rgba(75, 21, 149, 1) 100%)",
+            "badge_text": "#FFFFFF"
+          }
+        },
+        "cat_best": {
+          "type": "category",
+          "settings": {
+            "title": "Best sellers",
+            "products": [
+              "grapefruit-sparkling-soda",
+              "sea-salt-popcorn",
+              "white-cheddar-popcorn",
+              "chocolate-chip-protein-bars"
+            ]
+          }
+        },
+        "cat_soda": {
+          "type": "category",
+          "settings": {
+            "title": "Sparkling soda",
+            "products": [
+              "grapefruit-sparkling-soda",
+              "lime-sparkling-soda",
+              "peach-mango-sparkling-soda",
+              "wild-berry-sparkling-soda"
+            ]
+          }
+        },
+        "cat_popcorn": {
+          "type": "category",
+          "settings": {
+            "title": "Popcorn",
+            "products": [
+              "sea-salt-popcorn",
+              "kettle-corn-popcorn",
+              "white-cheddar-popcorn",
+              "chili-lime-popcorn"
+            ]
+          }
+        },
+        "cat_bars": {
+          "type": "category",
+          "settings": {
+            "title": "Protein bars",
+            "products": [
+              "chocolate-chip-protein-bars",
+              "peanut-butter-protein-bars",
+              "birthday-cake-protein-bars",
+              "cookies-and-cream-protein-bars"
+            ]
+          }
+        },
+        "preset_allstar": {
+          "type": "preset",
+          "settings": {
+            "title": "All star",
+            "size": 6,
+            "products": [
+              "grapefruit-sparkling-soda",
+              "sea-salt-popcorn",
+              "white-cheddar-popcorn",
+              "chocolate-chip-protein-bars",
+              "peach-mango-sparkling-soda",
+              "peanut-butter-protein-bars"
+            ]
+          }
+        },
+        "preset_discovery": {
+          "type": "preset",
+          "settings": {
+            "title": "Discovery kit",
+            "size": 8,
+            "products": [
+              "lime-sparkling-soda",
+              "wild-berry-sparkling-soda",
+              "kettle-corn-popcorn",
+              "chili-lime-popcorn",
+              "sea-salt-popcorn",
+              "birthday-cake-protein-bars",
+              "cookies-and-cream-protein-bars",
+              "peanut-butter-protein-bars"
+            ]
+          }
+        },
+        "preset_fizz": {
+          "type": "preset",
+          "settings": {
+            "title": "Fizz pack",
+            "size": 4,
+            "products": [
+              "grapefruit-sparkling-soda",
+              "lime-sparkling-soda",
+              "peach-mango-sparkling-soda",
+              "wild-berry-sparkling-soda"
+            ]
+          }
+        }
+      },
+      "block_order": [
+        "size_4",
+        "size_6",
+        "size_8",
+        "preset_allstar",
+        "preset_discovery",
+        "preset_fizz",
+        "cat_best",
+        "cat_soda",
+        "cat_popcorn",
+        "cat_bars"
+      ],
+      "settings": {
+        "heading": "Build your box",
+        "after_add": "drawer",
+        "image_fit": "contain",
+        "use_custom_font": true,
+        "font": "poppins_n4",
+        "sticky_top": 16,
+        "columns_desktop": 4,
+        "subheading": "Mix sodas, popcorn and protein bars. The bigger the box, the more you save."
+      }
+    }
+  },
+  "order": [
+    "main"
+  ]
+}
